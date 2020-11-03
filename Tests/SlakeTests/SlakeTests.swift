@@ -1,15 +1,50 @@
+import Combine
+import CombineExpectations
+import Slake
 import XCTest
-@testable import Slake
+
+struct A: Query {
+  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
+    Just(10).eraseToAnyPublisher()
+  }
+}
+
+struct B: Query {
+  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
+    runner(A()).map { $0 + 20 }.eraseToAnyPublisher()
+  }
+}
+
+struct C: Query {
+  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
+    runner(A()).map { $0 + 30 }.eraseToAnyPublisher()
+  }
+}
+
+struct D: Query {
+  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
+    runner(B())
+      .zip(runner(C()))
+      .map { $0.0 + $0.1 }
+      .eraseToAnyPublisher()
+  }
+}
 
 final class SlakeTests: XCTestCase {
-    func testExample() {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct
-        // results.
-        XCTAssertEqual(Slake().text, "Hello, World!")
-    }
+  func testSimpleQuery() throws {
+    let runner = TaskRunner(cache: .inMemory)
 
-    static var allTests = [
-        ("testExample", testExample),
-    ]
+    let publisher1 = runner(D())
+    let recorder1 = publisher1.record()
+    let elements1 = try wait(for: recorder1.elements, timeout: 0.1)
+
+    XCTAssertEqual(elements1, [70])
+
+    print("First execution complete")
+
+    let publisher2 = runner(D())
+    let recorder2 = publisher2.record()
+    let elements2 = try wait(for: recorder2.elements, timeout: 0.1)
+    XCTAssertEqual(elements2, [70])
+  }
 }
