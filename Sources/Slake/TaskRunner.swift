@@ -5,7 +5,21 @@ public protocol Query: Hashable {
   associatedtype Output
   associatedtype Failure: Error
 
-  func task(for runner: TaskRunner) -> AnyPublisher<Output, Failure>
+  func task(for runner: TaskRunner) -> Task<Output, Failure>
+}
+
+public final class Task<Output, Failure: Error> {
+  init(publisher: AnyPublisher<Output, Failure>) {
+    self.publisher = publisher
+  }
+
+  let publisher: AnyPublisher<Output, Failure>
+}
+
+public extension Publisher {
+  func eraseToTask() -> Task<Output, Failure> {
+    .init(publisher: eraseToAnyPublisher())
+  }
 }
 
 public final class Cache {
@@ -36,11 +50,11 @@ public final class Cache {
 }
 
 public final class TaskRunner {
-  private var cache: Cache
+  private var resultsCache: Cache
   private var inProgress = [AnyHashable: Any]()
 
-  public init(cache: Cache) {
-    self.cache = cache
+  public init(resultsCache: Cache) {
+    self.resultsCache = resultsCache
   }
 
   public func callAsFunction<Q: Query>(_ query: Q) -> AnyPublisher<Q.Output, Q.Failure> {
@@ -51,7 +65,7 @@ public final class TaskRunner {
       return inProgressTask
     }
 
-    if let cached = cache[query] as? Q.Output {
+    if let cached = resultsCache[query] as? Q.Output {
       print("Found cached output for \(query)")
       return Just(cached).setFailureType(to: Q.Failure.self).eraseToAnyPublisher()
     }
@@ -61,11 +75,12 @@ public final class TaskRunner {
     inProgress[query] = task
 
     return task
-      .receive(on: cache.queue)
+      .publisher
+      .receive(on: resultsCache.queue)
       .handleEvents(
         receiveOutput: {
           print("caching result \($0) for query \(query)")
-          self.cache[query] = $0
+          self.resultsCache[query] = $0
         },
         receiveCompletion: { _ in
           self.inProgress[query] = nil

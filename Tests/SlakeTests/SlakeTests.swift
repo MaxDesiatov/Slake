@@ -4,35 +4,35 @@ import Slake
 import XCTest
 
 struct A: Query {
-  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
-    Just(10).eraseToAnyPublisher()
+  func task(for runner: TaskRunner) -> Task<Int, Never> {
+    Just(10).eraseToTask()
   }
 }
 
 struct B: Query {
-  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
-    runner(A()).map { $0 + 20 }.eraseToAnyPublisher()
+  func task(for runner: TaskRunner) -> Task<Int, Never> {
+    runner(A()).map { $0 + 20 }.eraseToTask()
   }
 }
 
 struct C: Query {
-  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
-    runner(A()).map { $0 + 30 }.eraseToAnyPublisher()
+  func task(for runner: TaskRunner) -> Task<Int, Never> {
+    runner(A()).map { $0 + 30 }.eraseToTask()
   }
 }
 
 struct D: Query {
-  func task(for runner: TaskRunner) -> AnyPublisher<Int, Never> {
+  func task(for runner: TaskRunner) -> Task<Int, Never> {
     runner(B())
       .zip(runner(C()))
       .map { $0.0 + $0.1 }
-      .eraseToAnyPublisher()
+      .eraseToTask()
   }
 }
 
 final class SlakeTests: XCTestCase {
   func testSimpleQuery() throws {
-    let runner = TaskRunner(cache: .inMemory)
+    let runner = TaskRunner(resultsCache: .inMemory)
 
     let publisher1 = runner(D())
     let recorder1 = publisher1.record()
