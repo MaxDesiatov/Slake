@@ -8,44 +8,74 @@ import TSCBasic
 
 private let fsQueue = DispatchQueue.global(qos: .utility)
 
-struct FileDependency: Query {
-  let files: [AbsolutePath]
+struct FileInfo: Hashable, Codable {
+  let path: AbsolutePath
+  let size: UInt64
+  let hash: [UInt8]
+}
 
-  func task(for runner: TaskRunner) -> Task<AbsolutePath, Error> {
-    Empty().eraseToTask()
-  }
+func fileInfo(_ files: AbsolutePath...) -> AnyPublisher<FileInfo, Error> {
+  fileInfo(files)
+}
+
+func fileInfo(_ files: [AbsolutePath]) -> AnyPublisher<FileInfo, Error> {
+  Empty().eraseToAnyPublisher()
+}
+
+func fork(_ arguments: String...) -> AnyPublisher<(), Error> {
+  fork(arguments)
+}
+
+func fork(_ arguments: [String]) -> AnyPublisher<(), Error> {
+  Empty().eraseToAnyPublisher()
 }
 
 struct CObjectFile: Query {
-  let sourceFile: AbsolutePath
+  let sourceFile: FileInfo
 
-  func task(for runner: TaskRunner) -> Task<AbsolutePath, Error> {
-    Empty().eraseToTask()
+  func task(for runner: TaskRunner) -> Task<FileInfo, Error> {
+    fork("cc", "-c", sourceFile.path.pathString)
+      .flatMap { _ in
+        fileInfo(
+          sourceFile.path.parentDirectory.appending(
+            component: "\(sourceFile.path.basenameWithoutExt).o"
+          )
+        )
+      }.eraseToTask()
   }
 }
 
 struct LinkExecutable: Query {
-  let objectFiles: [AbsolutePath]
+  let objectFiles: [FileInfo]
   let executableFile: AbsolutePath
 
-  func task(for runner: TaskRunner) -> Task<AbsolutePath, Error> {
-    Empty().eraseToTask()
+  func task(for runner: TaskRunner) -> Task<FileInfo, Error> {
+    fork(["ld"] + objectFiles.map(\.path.pathString))
+      .flatMap { _ in
+        fileInfo(
+          executableFile.parentDirectory.appending(
+            component: executableFile.basenameWithoutExt
+          )
+        )
+      }
+      .eraseToTask()
   }
 }
 
 struct BuildCExecutable: Query {
   let sourceFiles: [AbsolutePath]
   let executableFile: AbsolutePath
-  let parallelJobs = 1
 
   func task(for runner: TaskRunner) -> Task<AbsolutePath, Error> {
-    runner(FileDependency(files: sourceFiles))
-      .flatMap(maxPublishers: .max(parallelJobs)) {
+    fileInfo(sourceFiles)
+      .flatMap(maxPublishers: .unlimited) {
         runner(CObjectFile(sourceFile: $0))
       }
       .collect()
       .flatMap {
         runner(LinkExecutable(objectFiles: $0, executableFile: executableFile))
-      }.eraseToTask()
+      }
+      .map(\.path)
+      .eraseToTask()
   }
 }

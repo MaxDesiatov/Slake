@@ -1,7 +1,7 @@
 import Combine
 import Dispatch
 
-public protocol Query: Hashable {
+public protocol Query: Hashable, Codable {
   associatedtype Output
   associatedtype Failure: Error
 
