@@ -1,5 +1,6 @@
 import Combine
 import Dispatch
+import TSCBasic
 
 public protocol Query: Hashable, Codable {
   associatedtype Output
@@ -57,7 +58,7 @@ public final class TaskRunner {
     self.resultsCache = resultsCache
   }
 
-  public func callAsFunction<Q: Query>(_ query: Q) -> AnyPublisher<Q.Output, Q.Failure> {
+  public func query<Q: Query>(_ query: Q) -> AnyPublisher<Q.Output, Q.Failure> {
     print("Running \(query)")
 
     if let inProgressTask = inProgress[query] as? AnyPublisher<Q.Output, Q.Failure> {
@@ -86,5 +87,21 @@ public final class TaskRunner {
           self.inProgress[query] = nil
         }
       ).eraseToAnyPublisher()
+  }
+
+  func fileInfo(_ files: AbsolutePath...) -> AnyPublisher<FileInfo, Error> {
+    fileInfo(files)
+  }
+
+  func fileInfo(_ files: [AbsolutePath]) -> AnyPublisher<FileInfo, Error> {
+    Empty().eraseToAnyPublisher()
+  }
+
+  func fork(_ arguments: String...) -> AnyPublisher<(), Error> {
+    fork(arguments)
+  }
+
+  func fork(_ arguments: [String]) -> AnyPublisher<(), Error> {
+    Empty().eraseToAnyPublisher()
   }
 }

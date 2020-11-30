@@ -14,29 +14,13 @@ struct FileInfo: Hashable, Codable {
   let hash: [UInt8]
 }
 
-func fileInfo(_ files: AbsolutePath...) -> AnyPublisher<FileInfo, Error> {
-  fileInfo(files)
-}
-
-func fileInfo(_ files: [AbsolutePath]) -> AnyPublisher<FileInfo, Error> {
-  Empty().eraseToAnyPublisher()
-}
-
-func fork(_ arguments: String...) -> AnyPublisher<(), Error> {
-  fork(arguments)
-}
-
-func fork(_ arguments: [String]) -> AnyPublisher<(), Error> {
-  Empty().eraseToAnyPublisher()
-}
-
 struct CObjectFile: Query {
   let sourceFile: FileInfo
 
   func task(for runner: TaskRunner) -> Task<FileInfo, Error> {
-    fork("cc", "-c", sourceFile.path.pathString)
+    runner.fork("cc", "-c", sourceFile.path.pathString)
       .flatMap { _ in
-        fileInfo(
+        runner.fileInfo(
           sourceFile.path.parentDirectory.appending(
             component: "\(sourceFile.path.basenameWithoutExt).o"
           )
@@ -50,9 +34,9 @@ struct LinkExecutable: Query {
   let executableFile: AbsolutePath
 
   func task(for runner: TaskRunner) -> Task<FileInfo, Error> {
-    fork(["ld"] + objectFiles.map(\.path.pathString))
+    runner.fork(["ld"] + objectFiles.map(\.path.pathString))
       .flatMap { _ in
-        fileInfo(
+        runner.fileInfo(
           executableFile.parentDirectory.appending(
             component: executableFile.basenameWithoutExt
           )
@@ -67,13 +51,13 @@ struct BuildCExecutable: Query {
   let executableFile: AbsolutePath
 
   func task(for runner: TaskRunner) -> Task<AbsolutePath, Error> {
-    fileInfo(sourceFiles)
+    runner.fileInfo(sourceFiles)
       .flatMap(maxPublishers: .unlimited) {
-        runner(CObjectFile(sourceFile: $0))
+        runner.query(CObjectFile(sourceFile: $0))
       }
       .collect()
       .flatMap {
-        runner(LinkExecutable(objectFiles: $0, executableFile: executableFile))
+        runner.query(LinkExecutable(objectFiles: $0, executableFile: executableFile))
       }
       .map(\.path)
       .eraseToTask()
